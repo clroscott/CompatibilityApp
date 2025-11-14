@@ -1,0 +1,175 @@
+﻿@page "/DayFiance/Relationshipmanagement"
+@rendermode InteractiveServer
+
+@using CompatibilityApp.Domain.DayFiance.Relationships
+@using CompatibilityApp.Domain.DayFiance.Seasons
+@using CompatibilityApp.Domain.DayFiance.People
+
+
+@inject IRelationshipService RelationshipSvc
+@inject ISeasonService SeasonService
+@inject NavigationManager Nav
+
+<h3>Relationship Management</h3>
+
+<div class="d-flex align-items-center gap-2 mb-3">
+    <label>Season:</label>
+    <select class="form-select form-select-sm" style="width: 100px"
+            @bind="SeasonNumber"
+            @bind:after="SeasonChangedAsync">
+        @foreach (var s in AvailableSeasons)
+        {
+            <option value="@s">@s</option>
+        }
+    </select>
+</div>
+
+@if (isLoading)
+{
+    <p>Loading…</p>
+}
+else if (rows.Count == 0)
+{
+    <div class="alert alert-info">
+        No relationships found for season @SeasonNumber.
+    </div>
+}
+else
+{
+    <div class="table-responsive">
+        <table class="table table-sm table-striped align-middle">
+            <thead>
+                <tr>
+                    <th style="min-width:220px;">Couple</th>
+                    <th style="min-width:200px;">Person 1</th>
+                    <th style="min-width:200px;">Person 2</th>
+                    <th style="width:140px;">Relationship type</th>
+                    <th style="width:120px;" class="text-end">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var r in rows)
+                {
+                    <tr>
+                        <td>
+                            <NameWithAvatar Name="@r.CoupleDisplayName"
+                                            ImagePath="@r.ImagePath"
+                                            OnClick="@(() => OpenRelationship(r.RelationshipId, r.Season))" />
+                        </td>
+
+
+                        <td>
+                            <NameWithAvatar Name="@r.Person1FullName"
+                                            ImagePath="@r.Person1ImagePath"
+                                            OnClick="@(() => OpenPerson(r.PersonId1))" />
+                        </td>
+
+                        <td>
+                            <NameWithAvatar Name="@r.Person2FullName"
+                                            ImagePath="@r.Person2ImagePath"
+                                            OnClick="@(() => OpenPerson(r.PersonId2))" />
+                        </td>
+
+                        <td>@r.RelationshipType</td>
+
+                        <td class="text-end">
+                            <button class="btn btn-sm btn-outline-primary"
+                                    @onclick="() => OpenRelationship(r.RelationshipId, r.Season)">
+                                Edit
+                            </button>
+                            @* Delete could be added later via PersonService.SetPersonRelationshipAsync(...) *@
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+@code {
+    private List<RelationshipRow> rows = new();
+    private List<short> AvailableSeasons = new();
+    private short SeasonNumber = 6;   // default / starting season
+    private bool isLoading;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadSeasonsAsync();
+        await LoadRelationshipsForSeasonAsync();
+    }
+
+    private async Task LoadSeasonsAsync()
+    {
+        AvailableSeasons = (await SeasonService.GetAllSeasonsAsync()).ToList();
+
+        if (!AvailableSeasons.Contains(SeasonNumber))
+        {
+            AvailableSeasons.Insert(0, SeasonNumber);
+        }
+    }
+
+    private async Task SeasonChangedAsync()
+    {
+        await LoadRelationshipsForSeasonAsync();
+    }
+
+    private async Task LoadRelationshipsForSeasonAsync()
+    {
+        isLoading = true;
+        try
+        {
+            var rels = await RelationshipSvc.GetRelationshipsWithRatingsAsync(SeasonNumber);
+
+            rows = rels.Select(r => new RelationshipRow
+            {
+                RelationshipId = r.RelationshipId,
+                Season = r.Season,
+                PersonId1 = r.PersonId1,
+                PersonId2 = r.PersonId2,
+                Person1FullName = $"{r.Person1FirstName} {r.Person1LastName}".Trim(),
+                Person2FullName = $"{r.Person2FirstName} {r.Person2LastName}".Trim(),
+                CoupleDisplayName = r.CoupleDisplayName,
+                RelationshipType = r.RelationshipType,
+                ImagePath = r.ImagePath,
+                Person1ImagePath = r.Person1ImagePath,
+                Person2ImagePath = r.Person2ImagePath
+            }).ToList();
+
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void OpenPerson(int personId)
+    {
+        Nav.NavigateTo($"/dayfiance/person/{personId}");
+    }
+
+    private void OpenRelationship(int relationshipId, short season)
+    {
+        Nav.NavigateTo($"/DayFiance/Relationship/{relationshipId}/{season}");
+    }
+
+    private sealed class RelationshipRow
+    {
+        public int RelationshipId { get; set; }
+        public short Season { get; set; }
+
+        public int PersonId1 { get; set; }
+        public int PersonId2 { get; set; }
+
+        public string Person1FullName { get; set; } = "";
+        public string Person2FullName { get; set; } = "";
+
+        public string CoupleDisplayName { get; set; } = "";
+        public string RelationshipType { get; set; } = "";
+
+        public string? ImagePath { get; set; }
+
+        public string? Person1ImagePath { get; set; }
+        public string? Person2ImagePath { get; set; }
+    }
+
+}

@@ -1,0 +1,274 @@
+﻿@page "/DayFiance/Ratings/PeopleRatings"
+@rendermode InteractiveServer
+@using CompatibilityApp.Domain.DayFiance.People
+@using CompatibilityApp.Domain.DayFiance.Ratings
+@using CompatibilityApp.Domain.DayFiance.Seasons
+@inject IPersonService PersonSvc
+@inject IRatingTypeService RatingTypeSvc
+@inject ISeasonService SeasonService
+@inject NavigationManager Nav
+
+<h3>People Ratings</h3>
+
+
+<div class="d-flex align-items-center gap-2 mb-3">
+    <label>Season:</label>
+    <select class="form-select form-select-sm" style="width: 100px"
+            @bind="SeasonNumber"
+            @bind:after="SeasonChanged">
+        @foreach (var s in AvailableSeasons)
+        {
+            <option value="@s">@s</option>
+        }
+    </select>
+
+</div>
+
+<div class="d-flex gap-2 mb-2">
+    <input class="form-control form-control-sm" style="max-width:280px"
+           placeholder="New rating type name"
+           @bind="newTypeName" />
+    <input class="form-control form-control-sm" style="max-width:280px"
+           placeholder="New rating type weight"
+           @bind="newTypeWeight" />
+    <button class="btn btn-sm btn-secondary" @onclick="AddRatingType">Add Type</button>
+    <button class="btn btn-sm btn-outline-secondary" @onclick="RefreshTypes">Refresh Types</button>
+</div>
+
+
+@if (rows is null || ratingTypes is null)
+{
+    <p>Loading…</p>
+}
+else
+{
+    <table class="table table-striped table-sm align-middle">
+        <thead>
+            <tr>
+                <th style="min-width:200px">Person</th>
+                <th style="width:70px">Age</th>
+                @foreach (var rt in ratingTypes)
+                {
+                    <th class="text-center" title="@rt.RatingName">
+                        <div class="d-inline-flex align-items-center gap-1">
+                            <span class="fw-semibold">@rt.RatingName</span>
+
+                            <input class="form-control form-control-sm"
+                                   style="width:60px; padding:0 4px;"
+                                   type="number"
+                                   step="0.5"
+                                   value="@rt.RatingWeight"
+                                   @onchange="async e => await SaveWeightAsync(rt.RatingTypeId, ParseDecimalOrNull(e.Value))" />
+                        </div>
+                    </th>
+                }
+
+                <th style="width:140px"></th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var r in rows)
+            {
+                <tr>
+                   @*  <td><input class="form-control form-control-sm" @bind="r.FirstName" /></td>
+                    <td><input class="form-control form-control-sm" @bind="r.LastName" /></td> *@
+                    <td>
+                        <NameWithAvatar Name="@($"{r.FirstName} {r.LastName}".Trim())"
+                                        ImagePath="@r.ImagePath"
+                                        OnClick="@(() => OpenPerson(r.PersonId))" />
+                    </td>
+                    <td>@(r.Age.ToString() ?? "")</td>
+
+                    @foreach (var rt in ratingTypes)
+                    {
+                        var val = r.Ratings.TryGetValue(rt.RatingTypeId, out var v) ? v : null;
+                        <td class="text-center">
+                            <input class="form-control form-control-sm d-inline-block text-center"
+                                   style="width:60px; padding:0 4px;"
+                                   type="number"
+                                   step="0.5"
+                                   value="@((string?)val?.ToString())"
+                                   @onchange="async e => await SaveRating(r.PersonId, rt.RatingTypeId, ParseDecimalOrNull(e.Value))" />
+                        </td>
+
+                    }
+
+                    @* <td class="text-nowrap">
+                        <button class="btn btn-primary btn-sm" @onclick="() => SavePerson(r)">Save</button>
+                        <button class="btn btn-outline-danger btn-sm ms-2" @onclick="() => DeletePerson(r)">Delete</button>
+                    </td> *@
+                </tr>
+            }
+        </tbody>
+    </table>
+
+    @* <button class="btn btn-success btn-sm" @onclick="AddNewRow">Add Person</button> *@
+}
+
+@code {
+    private List<PersonRow>? rows;
+    private List<RatingTypeDto>? ratingTypes;
+    private string newTypeName = "";
+    private decimal newTypeWeight = 0m;
+
+    private List<short> AvailableSeasons = new();
+    private short SeasonNumber = 6;   // default season
+
+
+    private readonly string PageCategoryType = "Person";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await RefreshTypes();
+        await LoadPeopleForSeason();
+        await LoadSeasonsAsync();
+        var people = await PersonSvc.GetPeopleWithRatingsAsync(SeasonNumber);
+        rows = people.Select(p => new PersonRow
+        {
+            PersonId = p.PersonId,
+            FirstName = p.FirstName,
+            LastName = p.LastName,
+            Age = p.Age,
+            ImagePath = p.ImagePath,   // ⬅ NEW
+            Ratings = new Dictionary<int, decimal?>(p.RatingsByTypeId)
+        }).ToList();
+
+
+        // ensure each row has keys for every rating type
+        EnsureAllRatingKeys();
+    }
+
+
+    private async Task LoadSeasonsAsync()
+    {
+        AvailableSeasons = (await SeasonService.GetAllSeasonsAsync()).ToList();
+
+        // ensure current SeasonNumber appears in the list
+        if (!AvailableSeasons.Contains((short)SeasonNumber))
+        {
+            // prefer to include current season so UI shows it
+            AvailableSeasons.Insert(0, (short)SeasonNumber);
+        }
+
+        // SelectedSeason = (short)SeasonNumber;
+    }
+
+    private async Task AddRatingType()
+    {
+        if (string.IsNullOrWhiteSpace(newTypeName)) return;
+        await RatingTypeSvc.AddAsync(newTypeName.Trim(), newTypeWeight, PageCategoryType);
+        newTypeName = "";
+        newTypeWeight = 0m;
+        await RefreshTypes();   // pulls new list and expands headers/cells
+    }
+
+    private async Task RefreshTypes()
+    {
+        ratingTypes = (await RatingTypeSvc.GetAllAsync()).Where(i => i.RatingCategory == PageCategoryType).ToList();
+        EnsureAllRatingKeys();
+        StateHasChanged();
+    }
+
+    private void EnsureAllRatingKeys()
+    {
+        if (rows is null || ratingTypes is null) return;
+        foreach (var r in rows)
+            foreach (var rt in ratingTypes)
+                if (!r.Ratings.ContainsKey(rt.RatingTypeId))
+                    r.Ratings[rt.RatingTypeId] = null;
+    }
+
+    // private async Task SavePerson(PersonRow r)
+    // {
+    //     if (string.IsNullOrWhiteSpace(r.FirstName) && string.IsNullOrWhiteSpace(r.LastName)) return;
+
+    //     if (r.Id == 0)
+    //         r.Id = await PersonSvc.AddPersonAsync(new PersonDto { FirstName = r.FirstName, LastName = r.LastName, DateOfBirth = r.BirthDate });
+    //     else
+    //         await PersonSvc.UpdatePersonAsync(r.Id, new PersonDto { FirstName = r.FirstName, LastName = r.LastName, DateOfBirth = r.BirthDate });
+
+    //     StateHasChanged();
+    // }
+
+    // private async Task DeletePerson(PersonRow r)
+    // {
+    //     if (r.Id != 0)
+    //         await PersonSvc.DeletePersonAsync(r.Id);
+
+    //     rows!.Remove(r);
+    // }
+
+    private async Task SaveRating(int personId, int ratingTypeId, decimal? value)
+    {
+        await PersonSvc.UpsertPersonRatingAsync(personId, ratingTypeId, value, SeasonNumber);
+
+        var row = rows!.First(x => x.PersonId == personId);
+        row.Ratings[ratingTypeId] = value;
+        StateHasChanged();
+    }
+    private async Task SeasonChanged()
+    {
+        await LoadPeopleForSeason();
+    }
+
+    private async Task LoadPeopleForSeason()
+    {
+        var people = await PersonSvc.GetPeopleWithRatingsAsync(SeasonNumber);
+        rows = people.Select(p => new PersonRow
+        {
+            PersonId = p.PersonId,
+            FirstName = p.FirstName,
+            LastName = p.LastName,
+            Age = p.Age,
+            ImagePath = p.ImagePath, 
+            Ratings = new Dictionary<int, decimal?>(p.RatingsByTypeId)
+        }).ToList();
+
+
+        EnsureAllRatingKeys();
+        StateHasChanged();
+    }
+    private async Task SaveWeightAsync(int ratingTypeId, decimal? newWeight)
+    {
+        if (ratingTypes is null || newWeight is null)
+            return;
+
+        // Update via service (adjust method name/signature to whatever you have)
+        await RatingTypeSvc.UpdateWeightAsync(ratingTypeId, newWeight.Value);
+
+        // Update local model so UI stays in sync without reloading everything
+        var rt = ratingTypes.FirstOrDefault(x => x.RatingTypeId == ratingTypeId);
+        if (rt is not null)
+        {
+            rt.RatingWeight = newWeight.Value;
+        }
+
+        StateHasChanged();
+    }
+    private void OpenPerson(int personId)
+    {
+        Nav.NavigateTo($"/dayfiance/person/{personId}");
+    }
+    private static decimal? ParseDecimalOrNull(object? v)
+    => decimal.TryParse(v?.ToString(), out var d) ? d : null;
+
+    // private static int? ParseIntOrNull(object? v)
+    //     => int.TryParse(v?.ToString(), out var n) ? n : null;
+
+    // private void AddNewRow()
+    //     => rows!.Add(new PersonRow { FirstName = "", LastName = "" });
+   
+    private sealed class PersonRow
+    {
+        public int PersonId { get; set; }
+        public string FirstName { get; set; } = "";
+        public string LastName { get; set; } = "";
+        public DateTime BirthDate { get; set; }
+        public int Age { get; set; }
+
+        public string ImagePath { get; set; } = "";   // ⬅ NEW
+
+        public Dictionary<int, decimal?> Ratings { get; set; } = new();
+    }
+
+}

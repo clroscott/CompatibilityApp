@@ -1,0 +1,315 @@
+@page "/dayfiance/person/{PersonId:int}"
+@rendermode InteractiveServer
+
+@using CompatibilityApp.Domain.DayFiance.People
+@using CompatibilityApp.Domain.Common.Images
+@using Microsoft.AspNetCore.Components.Forms
+@using System.IO
+
+@inject IPersonService PersonService
+@inject IImageStorageService ImageStorage
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+
+<h3>Person Details</h3>
+
+@if (isLoading)
+{
+    <p>Loading…</p>
+}
+else if (edit is null)
+{
+    <div class="alert alert-warning">Person not found.</div>
+}
+else
+{
+    <EditForm Model="edit" OnValidSubmit="SaveAsync">
+        <div class="card mb-3">
+            <div class="card-body">
+                <!-- Basic identity -->
+                <div class="row g-2">
+                    <div class="col-md-4">
+                        <label class="form-label">First name</label>
+                        <InputText class="form-control" @bind-Value="edit.FirstName" />
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Last name</label>
+                        <InputText class="form-control" @bind-Value="edit.LastName" />
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Date of birth</label>
+                        <InputDate class="form-control" @bind-Value="edit.DateOfBirth" />
+                    </div>
+                </div>
+
+                <!-- Location / type / gender -->
+                <div class="row g-2 mt-2">
+                    <div class="col-md-4">
+                        <label class="form-label">Home city</label>
+                        <InputText class="form-control" @bind-Value="edit.HomeCity" />
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Home country</label>
+                        <InputText class="form-control" @bind-Value="edit.HomeCountry" />
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">Person type</label>
+                        <InputText class="form-control" @bind-Value="edit.PersonType" />
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">Gender</label>
+                        <InputText class="form-control" @bind-Value="edit.Gender" />
+                    </div>
+                </div>
+
+                <!-- Image upload -->
+                <div class="row g-2 mt-3">
+                    <div class="col-md-6">
+                        <label class="form-label">Photo</label>
+                        <InputFile OnChange="OnImageSelected" />
+                        <div class="form-text">
+                            JPG / PNG / GIF / WEBP, max ~2 MB.
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        @if (!string.IsNullOrWhiteSpace(edit.ImagePath))
+                        {
+                            <label class="form-label d-block">Current image</label>
+                            <img src="@edit.ImagePath"
+                                 alt="Profile image for @edit.FullName"
+                                 class="img-thumbnail"
+                                 style="max-height: 150px;" />
+                        }
+                    </div>
+                </div>
+
+                <div class="row mt-3">
+                    <div class="col">
+                        <p>
+                            <strong>Full name:</strong>
+                            @edit.FullName
+                        </p>
+                        <p>
+                            <strong>Age:</strong>
+                            @(edit.DateOfBirth == default ? "-" : ComputeAge(edit.DateOfBirth).ToString())
+                        </p>
+                    </div>
+                    <div class="col text-end">
+                        <button type="submit" class="btn btn-primary me-2" disabled="@isSaving">Save</button>
+                        @if (edit.PersonId != 0)
+                        {
+                            <button type="button"
+                                    class="btn btn-danger me-2"
+                                    @onclick="DeleteAsync"
+                                    disabled="@isSaving">
+                                Delete
+                            </button>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+    </EditForm>
+}
+
+@code {
+    [Parameter] public int PersonId { get; set; }
+
+    private PersonEditModel? edit;
+    private bool isLoading;
+    private bool isSaving;
+
+    private IBrowserFile? uploadedFile;
+    private bool hasNewImage;
+
+    private record PersonEditModel
+    {
+        public int PersonId { get; set; }
+        public string FirstName { get; set; } = "";
+        public string LastName { get; set; } = "";
+        public DateTime DateOfBirth { get; set; } = DateTime.Today;
+
+        public string HomeCity { get; set; } = "";
+        public string HomeCountry { get; set; } = "";
+        public string PersonType { get; set; } = "";
+        public string Gender { get; set; } = "";
+
+        public string ImagePath { get; set; } = "";
+
+        public string FullName => $"{FirstName} {LastName}".Trim();
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        isLoading = true;
+        try
+        {
+            if (PersonId == 0)
+            {
+                edit = new PersonEditModel
+                {
+                    PersonId = 0,
+                    DateOfBirth = DateTime.Today
+                };
+            }
+            else
+            {
+                var all = await PersonService.GetAllPeopleAsync();
+                var dto = all.FirstOrDefault(p => p.PersonId == PersonId);
+                if (dto is null)
+                {
+                    edit = null;
+                }
+                else
+                {
+                    edit = new PersonEditModel
+                    {
+                        PersonId = dto.PersonId,
+                        FirstName = dto.FirstName,
+                        LastName = dto.LastName,
+                        DateOfBirth = dto.DateOfBirth,
+                        HomeCity = dto.HomeCity,
+                        HomeCountry = dto.HomeCountry,
+                        PersonType = dto.PersonType,
+                        Gender = dto.Gender,
+                        ImagePath = dto.ImagePath
+                    };
+                }
+            }
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private int ComputeAge(DateTime dob)
+    {
+        var today = DateTime.Today;
+        var age = today.Year - dob.Year;
+        if (today < dob.AddYears(age)) age--;
+        return age;
+    }
+
+    private async Task OnImageSelected(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        if (file is null)
+        {
+            uploadedFile = null;
+            hasNewImage = false;
+            return;
+        }
+
+        var permitted = new[] { "image/jpeg", "image/png", "image/gif", "image/webp" };
+        if (!permitted.Contains(file.ContentType))
+        {
+            uploadedFile = null;
+            hasNewImage = false;
+            return;
+        }
+
+        uploadedFile = file;
+        hasNewImage = true;
+    }
+
+    private async Task SaveAsync()
+    {
+        if (edit is null) return;
+
+        isSaving = true;
+        try
+        {
+            var maxSize = 2 * 1024 * 1024L; // 2 MB
+            int personId = edit.PersonId;
+            string imagePath = edit.ImagePath;
+
+            // 1) If this is a new person, create them first (without image)
+            if (personId == 0)
+            {
+                var baseDto = new PersonDto
+                {
+                    PersonId = 0,
+                    FirstName = edit.FirstName,
+                    LastName = edit.LastName,
+                    DateOfBirth = edit.DateOfBirth,
+                    HomeCity = edit.HomeCity,
+                    HomeCountry = edit.HomeCountry,
+                    PersonType = edit.PersonType,
+                    Gender = edit.Gender,
+                    ImagePath = ""
+                };
+
+                personId = await PersonService.AddPersonAsync(baseDto);
+                edit.PersonId = personId;
+            }
+
+            // 2) If a new image was uploaded, store via IImageStorageService
+            if (hasNewImage && uploadedFile is not null)
+            {
+                var ext = Path.GetExtension(uploadedFile.Name);
+                if (string.IsNullOrWhiteSpace(ext))
+                    ext = ".jpg";
+
+                await using var stream = uploadedFile.OpenReadStream(maxSize);
+                imagePath = await ImageStorage.SaveImageAsync(
+                    category: "person",
+                    id: personId,
+                    content: stream,
+                    extension: ext);
+
+                edit.ImagePath = imagePath;
+            }
+
+            // 3) Update person with final data + image path
+            var dtoFinal = new PersonDto
+            {
+                PersonId = personId,
+                FirstName = edit.FirstName,
+                LastName = edit.LastName,
+                DateOfBirth = edit.DateOfBirth,
+                HomeCity = edit.HomeCity,
+                HomeCountry = edit.HomeCountry,
+                PersonType = edit.PersonType,
+                Gender = edit.Gender,
+                ImagePath = imagePath
+            };
+
+            await PersonService.UpdatePersonAsync(personId, dtoFinal);
+
+            uploadedFile = null;
+            hasNewImage = false;
+
+            await LoadAsync();
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private async Task DeleteAsync()
+    {
+        if (edit is null || edit.PersonId == 0) return;
+
+        var ok = await JS.InvokeAsync<bool>("confirm",
+            $"Delete {edit.FullName}?");
+        if (!ok) return;
+
+        isSaving = true;
+        try
+        {
+            await PersonService.DeletePersonAsync(edit.PersonId);
+            Nav.NavigateTo("/dayfiance/people/manage");
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+}

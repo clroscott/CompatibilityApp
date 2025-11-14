@@ -1,0 +1,248 @@
+﻿@page "/DayFiance/Season/{SeasonNumber:int}"
+@rendermode InteractiveServer
+@using Microsoft.AspNetCore.Components.Forms
+@using CompatibilityApp.Domain.DayFiance.People
+@using CompatibilityApp.Domain.DayFiance.Seasons
+@inject IPersonService PersonService
+@inject ISeasonService SeasonService
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+
+<h3>
+    Season @SeasonNumber
+    <span class="ms-3">
+        <InputSelect TValue="short" class="form-select form-select-sm d-inline-block" style="width:120px"
+                     @bind-Value="SelectedSeason">
+            @if (AvailableSeasons?.Any() != true)
+            {
+                <option value="0">--</option>
+            }
+            else
+            {
+                @foreach (var s in AvailableSeasons)
+                {
+                    <option value="@s">Season @s</option>
+                }
+            }
+        </InputSelect>
+    </span>
+</h3>
+
+<div class="card mb-3">
+    <div class="card-body">
+        <h5 class="card-title">Season details</h5>
+
+        <div class="row g-2">
+            <div class="col-md-3">
+                <label class="form-label">Air date</label>
+                <InputDate class="form-control" @bind-Value="AirDate" />
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Filming date</label>
+                <InputDate class="form-control" @bind-Value="FilmingDate" />
+            </div>
+            <div class="col-md-3 align-self-end">
+                <button type="button" class="btn btn-primary" @onclick="SaveSeasonAsync" disabled="@IsSaving">Save season</button>
+                <button type="button" class="btn btn-secondary ms-2" @onclick="GoBack">Back</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <h5 class="card-title">Roster — add existing people</h5>
+
+        <div class="row g-2 mb-3">
+            <div class="col-md-6">
+                @* Use typed InputSelect with sentinel placeholder -1 *@
+                <InputSelect TValue="int" class="form-select" @bind-Value="SelectedPersonId">
+                    <option value="-1">-- select person to add --</option>
+                    @foreach (var p in AllPeople)
+                    {
+                        <option value="@p.PersonId">@p.FullName (@ComputeAge(p.DateOfBirth))</option>
+                    }
+                </InputSelect>
+            </div>
+            <div class="col-md-6 d-flex gap-2">
+                <button type="button" class="btn btn-success"
+                        @onclick="AddSelectedPersonAsync"
+                        disabled="@CanAdd">
+                    Add to season
+                </button>
+            </div>
+        </div>
+
+        <table class="table table-sm">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Age</th>
+                    <th>Relationship</th>
+                    <th class="text-end">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (Roster?.Any() != true)
+                {
+                    <tr><td colspan="4"><em>No people on this season.</em></td></tr>
+                }
+                else
+                {
+                    @foreach (var row in Roster)
+                    {
+                        <tr>
+                            <td>@row.FullName</td>
+                            <td>@ComputeAge(row.DateOfBirth)</td>
+                            <td style="min-width:240px">
+                                <select class="form-select form-select-sm" @bind="LocalPartnerMap[row.PersonId]">
+                                    <option value="0">-- none --</option>
+                                    @foreach (var r in Roster.Where(x => x.PersonId != row.PersonId))
+                                    {
+                                        <option value="@r.PersonId">@r.FullName</option>
+                                    }
+                                </select>
+                                <div class="mt-1">
+                                    <button type="button" class="btn btn-sm btn-outline-primary me-1" @onclick="() => SetPartnerAsync(row.PersonId)">Set</button>
+                                    <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="() => ClearPartnerAsync(row.PersonId)">Clear</button>
+                                </div>
+                            </td>
+                            <td class="text-end">
+                                <button type="button" class="btn btn-sm btn-danger" @onclick="() => RemovePersonAsync(row.PersonId)">Remove</button>
+                            </td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+@code {
+    [Parameter] public int SeasonNumber { get; set; }
+
+    private SeasonDto SeasonModel { get; set; } = new SeasonDto { SeasonNum = 0 };
+    private List<PersonDto> AllPeople { get; set; } = new();
+    private List<PersonSeasonDto> Roster { get; set; } = new();
+    private Dictionary<int, int> LocalPartnerMap { get; set; } = new(); // personId -> partnerId (0 == none)
+
+    private int SelectedPersonId { get; set; } = -1;
+    private bool IsSaving { get; set; }
+    private bool CanAdd => IsSaving || SelectedPersonId <= 0;
+
+    private DateTime? AirDate { get; set; }
+    private DateTime? FilmingDate { get; set; }
+
+    private List<short> AvailableSeasons { get; set; } = new();
+    private short SelectedSeason
+    {
+        get => _selectedSeason;
+        set
+        {
+            if (_selectedSeason == value) return;
+
+            if (_selectedSeason != 0)
+            {
+                _selectedSeason = value;
+                // navigate when user changes season in the dropdown
+                // use NavigationManager to update URL and cause page to reload with new season param
+                Nav.NavigateTo($"/dayfiance/season/{_selectedSeason}");
+            }
+            else
+            {
+                _selectedSeason = value;
+            }
+        }
+    }
+
+    private short _selectedSeason;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadSeasonsAsync();
+        await LoadAllAsync();
+    }
+
+    private async Task LoadSeasonsAsync()
+    {
+        AvailableSeasons = (await SeasonService.GetAllSeasonsAsync()).ToList();
+
+        // ensure current SeasonNumber appears in the list
+        if (!AvailableSeasons.Contains((short)SeasonNumber))
+        {
+            // prefer to include current season so UI shows it
+            AvailableSeasons.Insert(0, (short)SeasonNumber);
+        }
+
+        SelectedSeason = (short)SeasonNumber;
+    }
+
+    private async Task LoadAllAsync()
+    {
+        var s = await SeasonService.GetSeasonAsync((short)SeasonNumber);
+        SeasonModel = s ?? new SeasonDto { SeasonNum = (short)SeasonNumber };
+
+        AirDate = SeasonModel.AirDate;
+        FilmingDate = SeasonModel.FilmingDate;
+
+        AllPeople = (await PersonService.GetAllPeopleAsync()).ToList();
+        Roster = (await PersonService.GetPeopleSeasonAsync((short)SeasonNumber)).ToList();
+
+        LocalPartnerMap = Roster.ToDictionary(r => r.PersonId, r => r.PartnerPersonId ?? 0);
+    }
+
+
+    private async Task SaveSeasonAsync()
+    {
+        IsSaving = true;
+        try
+        {
+            var dto = new SeasonDto { SeasonNum = (short)SeasonNumber, AirDate = AirDate, FilmingDate = FilmingDate };
+            await SeasonService.UpsertSeasonAsync(dto);
+            await LoadAllAsync();
+        }
+        finally { IsSaving = false; }
+    }
+
+    private async Task AddSelectedPersonAsync()
+    {
+        if (SelectedPersonId <= 0) return;
+
+        IsSaving = true;
+        try
+        {
+            await PersonService.AddPersonToSeasonAsync(SelectedPersonId, (short)SeasonNumber);
+            SelectedPersonId = -1;
+            await LoadAllAsync();
+        }
+        finally { IsSaving = false; }
+    }
+
+    private async Task RemovePersonAsync(int personId)
+    {
+        var ok = await JS.InvokeAsync<bool>("confirm", "Remove person from season?");
+        if (!ok) return;
+
+        await PersonService.RemovePersonFromSeasonAsync(personId, (short)SeasonNumber);
+        await LoadAllAsync();
+    }
+
+    private async Task SetPartnerAsync(int personId)
+    {
+        var partnerId = LocalPartnerMap.TryGetValue(personId, out var pid) ? pid : 0;
+        await PersonService.SetPersonRelationshipAsync(personId, partnerId == 0 ? null : partnerId, (short)SeasonNumber);
+        await LoadAllAsync();
+    }
+
+    private async Task ClearPartnerAsync(int personId)
+    {
+        LocalPartnerMap[personId] = 0;
+        await PersonService.SetPersonRelationshipAsync(personId, null, (short)SeasonNumber);
+        await LoadAllAsync();
+    }
+
+    private void GoBack() => Nav.NavigateTo("/");
+
+    private int ComputeAge(DateTime dob) =>
+        DateTime.Now.Year - dob.Year - (DateTime.Now.Date < dob.AddYears(DateTime.Now.Year - dob.Year) ? 1 : 0);
+}

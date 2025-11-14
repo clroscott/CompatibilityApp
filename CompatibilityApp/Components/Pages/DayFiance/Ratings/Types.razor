@@ -1,0 +1,245 @@
+﻿@page "/DayFiance/Ratings/Types"
+@rendermode InteractiveServer
+
+@using CompatibilityApp.Domain.DayFiance.Ratings
+@inject IRatingTypeService RatingTypeSvc
+@inject IJSRuntime JS
+
+<h3>Rating Types</h3>
+
+<div class="mb-3 d-flex justify-content-between align-items-center">
+    <div class="fw-light">
+        Manage all rating dimensions used for people and relationships.
+    </div>
+</div>
+
+<div class="card mb-3">
+    <div class="card-body">
+        <h5 class="card-title">Add new rating type</h5>
+
+        <div class="row g-2 align-items-end">
+            <div class="col-md-4">
+                <label class="form-label">Name</label>
+                <input class="form-control form-control-sm"
+                       @bind="newName"
+                       placeholder="e.g. Hotness, Drama, Compatibility" />
+            </div>
+
+            <div class="col-md-2">
+                <label class="form-label">Category</label>
+                <select class="form-select form-select-sm" @bind="newCategory">
+                    <option value="Person">Person</option>
+                    <option value="Relationship">Relationship</option>
+                    <option value="">Other / custom</option>
+                </select>
+            </div>
+
+            <div class="col-md-2">
+                <label class="form-label">Weight</label>
+                <input class="form-control form-control-sm"
+                       type="number"
+                       step="0.5"
+                       @bind="newWeight" />
+            </div>
+
+            <div class="col-md-2">
+                <button class="btn btn-sm btn-success"
+                        @onclick="AddAsync"
+                        disabled="@isBusy">
+                    ➕ Add
+                </button>
+            </div>
+        </div>
+
+        @if (!string.IsNullOrWhiteSpace(errorMessage))
+        {
+            <div class="mt-2 alert alert-danger py-1 mb-0">
+                @errorMessage
+            </div>
+        }
+    </div>
+</div>
+
+@if (isLoading)
+{
+    <p>Loading…</p>
+}
+else if (ratingTypes.Count == 0)
+{
+    <div class="alert alert-info">
+        No rating types defined yet.
+    </div>
+}
+else
+{
+    <div class="table-responsive">
+        <table class="table table-sm table-striped align-middle">
+            <thead>
+                <tr>
+                    <th style="min-width:200px;">Name</th>
+                    <th style="min-width:120px;">Category</th>
+                    <th style="width:110px;">Weight</th>
+                    <th style="width:160px;" class="text-end">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var rt in ratingTypes)
+                {
+                    <tr>
+                        <td>
+                            <input class="form-control form-control-sm"
+                                   @bind="rt.RatingName" />
+                        </td>
+                        <td>
+                            <select class="form-select form-select-sm" @bind="rt.RatingCategory">
+                                <option value="Person">Person</option>
+                                <option value="Relationship">Relationship</option>
+                                <option value="">Other / custom</option>
+                            </select>
+                        </td>
+                        <td>
+                            <input class="form-control form-control-sm text-end"
+                                   type="number"
+                                   step="0.5"
+                                   @bind="rt.RatingWeight" />
+                        </td>
+                        <td class="text-end">
+                            <button class="btn btn-sm btn-outline-primary me-1"
+                                    @onclick="() => SaveRowAsync(rt)"
+                                    disabled="@isBusy">
+                                Save
+                            </button>
+                            <button class="btn btn-sm btn-outline-danger"
+                                    @onclick="() => DeleteRowAsync(rt)"
+                                    disabled="@isBusy">
+                                Delete
+                            </button>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+@code
+{
+    private List<RatingTypeDto> ratingTypes = new();
+    private bool isLoading;
+    private bool isBusy;
+    private string? errorMessage;
+
+    // new row inputs
+    private string newName = "";
+    private string newCategory = "Person";
+    private decimal newWeight = 1m;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        isLoading = true;
+        errorMessage = null;
+        try
+        {
+            var all = await RatingTypeSvc.GetAllAsync();
+            ratingTypes = all
+                .OrderBy(rt => rt.RatingCategory)
+                .ThenBy(rt => rt.RatingName)
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task AddAsync()
+    {
+        errorMessage = null;
+
+        if (string.IsNullOrWhiteSpace(newName))
+        {
+            errorMessage = "Name is required.";
+            return;
+        }
+
+        isBusy = true;
+        try
+        {
+            var category = string.IsNullOrWhiteSpace(newCategory)
+                ? ""
+                : newCategory;
+
+            await RatingTypeSvc.AddAsync(newName.Trim(), newWeight, category);
+            // reset inputs
+            newName = "";
+            newWeight = 1m;
+
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+        }
+        finally
+        {
+            isBusy = false;
+        }
+    }
+
+    private async Task SaveRowAsync(RatingTypeDto rt)
+    {
+        if (rt is null) return;
+
+        isBusy = true;
+        errorMessage = null;
+        try
+        {
+            await RatingTypeSvc.UpdateAllAsync(rt.RatingTypeId, rt);
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+        }
+        finally
+        {
+            isBusy = false;
+        }
+    }
+
+    private async Task DeleteRowAsync(RatingTypeDto rt)
+    {
+        if (rt is null) return;
+
+        var ok = await JS.InvokeAsync<bool>(
+            "confirm",
+            $"Delete rating type '{rt.RatingName}' and ALL related ratings (people & relationships)?");
+
+        if (!ok) return;
+
+        isBusy = true;
+        errorMessage = null;
+        try
+        {
+            await RatingTypeSvc.DeleteAsync(rt.RatingTypeId);
+            ratingTypes.Remove(rt);
+        }
+        catch (Exception ex)
+        {
+            // If something goes wrong in the cascade, you’ll see it here
+            errorMessage = ex.Message;
+        }
+        finally
+        {
+            isBusy = false;
+        }
+    }
+}

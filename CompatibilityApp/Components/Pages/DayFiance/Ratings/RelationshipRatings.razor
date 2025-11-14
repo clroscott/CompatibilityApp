@@ -1,0 +1,217 @@
+﻿@page "/DayFiance/Ratings/RelationshipRatings"
+@rendermode InteractiveServer
+
+@using CompatibilityApp.Domain.DayFiance.People
+@using CompatibilityApp.Domain.DayFiance.Ratings
+@using CompatibilityApp.Domain.DayFiance.Relationships
+@using CompatibilityApp.Domain.DayFiance.Seasons
+
+@inject IRelationshipService RelationshipSvc
+@inject IRatingTypeService RatingTypeSvc
+@inject ISeasonService SeasonService
+@inject NavigationManager Nav
+
+<h3>Relationship Ratings</h3>
+
+<div class="d-flex align-items-center gap-2 mb-3">
+    <label>Season:</label>
+    <select class="form-select form-select-sm" style="width: 100px"
+            @bind="SeasonNumber"
+            @bind:after="SeasonChanged">
+        @foreach (var s in AvailableSeasons)
+        {
+            <option value="@s">@s</option>
+        }
+    </select>
+</div>
+
+<div class="d-flex gap-2 mb-2">
+    <input class="form-control form-control-sm" style="max-width:280px"
+           placeholder="New rating type name"
+           @bind="newTypeName" />
+    <input class="form-control form-control-sm" style="max-width:280px"
+           placeholder="New rating type weight"
+           @bind="newTypeWeight" />
+    <button class="btn btn-sm btn-secondary" @onclick="AddRatingType">Add Type</button>
+    <button class="btn btn-sm btn-outline-secondary" @onclick="RefreshTypes">Refresh Types</button>
+</div>
+
+@if (rows is null || ratingTypes is null)
+{
+    <p>Loading…</p>
+}
+else
+{
+    <table class="table table-striped table-sm align-middle">
+        <thead>
+            <tr>
+                <th style="min-width:200px">Couple</th>
+                @foreach (var rt in ratingTypes)
+                {
+                    <th class="text-center" title="@rt.RatingName">
+                        <div class="d-inline-flex align-items-center gap-1">
+                            <span class="fw-semibold">@rt.RatingName</span>
+                            <input class="form-control form-control-sm"
+                                   style="width:60px; padding:0 4px;"
+                                   type="number"
+                                   step="0.5"
+                                   value="@rt.RatingWeight"
+                                   @onchange="async e => await SaveWeightAsync(rt.RatingTypeId, ParseDecimalOrNull(e.Value))" />
+                        </div>
+                    </th>
+                }
+                <th style="width:80px"></th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var r in rows)
+            {
+                <tr>
+
+                    <td>
+                        <NameWithAvatar Name="@r.CoupleName"
+                                        ImagePath="@r.ImagePath"
+                                        OnClick="@(() => OpenRelationship(r.RelationshipId))" />
+                    </td>
+                    @foreach (var rt in ratingTypes)
+                    {
+                        var val = r.Ratings.TryGetValue(rt.RatingTypeId, out var v) ? v : null;
+                        <td class="text-center">
+                            <input class="form-control form-control-sm d-inline-block text-center"
+                                   style="width:60px; padding:0 4px;"
+                                   type="number"
+                                   value="@((string?)val?.ToString())"
+                                   @onchange="async e => await SaveRating(r.RelationshipId, rt.RatingTypeId, ParseIntOrNull(e.Value))" />
+                        </td>
+                    }
+
+                    <td></td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private List<RelationshipRow>? rows;
+    private List<RatingTypeDto>? ratingTypes;
+    private string newTypeName = "";
+    private decimal newTypeWeight = 0m;
+
+    private List<short> AvailableSeasons = new();
+    private short SeasonNumber = 6;   // default season
+
+    private readonly string PageCategoryType = "Relationship";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadSeasonsAsync();
+        await RefreshTypes();
+        await LoadRelationshipsForSeason();
+    }
+
+    private async Task LoadSeasonsAsync()
+    {
+        AvailableSeasons = (await SeasonService.GetAllSeasonsAsync()).ToList();
+
+        if (!AvailableSeasons.Contains(SeasonNumber))
+        {
+            AvailableSeasons.Insert(0, SeasonNumber);
+        }
+    }
+
+    private async Task AddRatingType()
+    {
+        if (string.IsNullOrWhiteSpace(newTypeName)) return;
+
+        await RatingTypeSvc.AddAsync(newTypeName.Trim(), newTypeWeight, PageCategoryType);
+        newTypeName = "";
+        newTypeWeight = 0m;
+
+        await RefreshTypes();
+    }
+
+    private async Task RefreshTypes()
+    {
+        ratingTypes = (await RatingTypeSvc.GetAllAsync())
+            .Where(i => i.RatingCategory == PageCategoryType)
+            .ToList();
+
+        EnsureAllRatingKeys();
+        StateHasChanged();
+    }
+
+    private void EnsureAllRatingKeys()
+    {
+        if (rows is null || ratingTypes is null) return;
+
+        foreach (var r in rows)
+            foreach (var rt in ratingTypes)
+                if (!r.Ratings.ContainsKey(rt.RatingTypeId))
+                    r.Ratings[rt.RatingTypeId] = null;
+    }
+
+    private async Task LoadRelationshipsForSeason()
+    {
+        var rels = await RelationshipSvc.GetRelationshipsWithRatingsAsync(SeasonNumber);
+
+        rows = rels.Select(r => new RelationshipRow
+        {
+            RelationshipId = r.RelationshipId,
+            CoupleName = $"{r.CoupleDisplayName}",
+            ImagePath = r.ImagePath,
+            Ratings = new Dictionary<int, decimal?>(r.RatingsByTypeId)
+        }).ToList();
+
+        EnsureAllRatingKeys();
+        StateHasChanged();
+    }
+
+    private async Task SaveRating(int relationshipId, int ratingTypeId, int? value)
+    {
+        await RelationshipSvc.UpsertRelationshipRatingAsync(
+            relationshipId, ratingTypeId, value, SeasonNumber);
+
+        var row = rows!.First(x => x.RelationshipId == relationshipId);
+        row.Ratings[ratingTypeId] = value;
+        StateHasChanged();
+    }
+
+    private async Task SeasonChanged()
+    {
+        await LoadRelationshipsForSeason();
+    }
+
+    private async Task SaveWeightAsync(int ratingTypeId, decimal? newWeight)
+    {
+        if (ratingTypes is null || newWeight is null)
+            return;
+
+        await RatingTypeSvc.UpdateWeightAsync(ratingTypeId, newWeight.Value);
+
+        var rt = ratingTypes.FirstOrDefault(x => x.RatingTypeId == ratingTypeId);
+        if (rt is not null)
+            rt.RatingWeight = newWeight.Value;
+
+        StateHasChanged();
+    }
+    private void OpenRelationship(int RelationshipId)
+    {
+        Nav.NavigateTo($"/dayfiance/Relationship/{RelationshipId}/{SeasonNumber}");
+    }
+
+    private static int? ParseIntOrNull(object? v)
+        => int.TryParse(v?.ToString(), out var n) ? n : (int?)null;
+
+    private static decimal? ParseDecimalOrNull(object? v)
+        => decimal.TryParse(v?.ToString(), out var d) ? d : (decimal?)null;
+
+    private sealed class RelationshipRow
+    {
+        public int RelationshipId { get; set; }
+        public string CoupleName { get; set; } = "";
+        public string ImagePath { get; set; } = "";
+        public Dictionary<int, decimal?> Ratings { get; set; } = new();
+    }
+}
+

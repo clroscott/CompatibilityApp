@@ -1,0 +1,146 @@
+﻿@page "/dayfiance/PeopleManagement"
+@rendermode InteractiveServer
+
+@using CompatibilityApp.Domain.DayFiance.People
+@inject IPersonService PersonService
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+
+<h3>People Management</h3>
+
+<div class="mb-3 d-flex justify-content-between align-items-center">
+    <div>
+        <button class="btn btn-sm btn-success" @onclick="AddPerson" disabled="@isBusy">
+            ➕ Add person
+        </button>
+    </div>
+</div>
+
+@if (isLoading)
+{
+    <p>Loading…</p>
+}
+else if (people.Count == 0)
+{
+    <div class="alert alert-info">
+        No people found.
+        <button class="btn btn-sm btn-success ms-2" @onclick="AddPerson" disabled="@isBusy">
+            ➕ Add first person
+        </button>
+    </div>
+}
+else
+{
+    <div class="table-responsive">
+        <table class="table table-sm table-striped align-middle">
+            <thead>
+                <tr>
+                    <th style="width: 220px;">Name</th>
+                    <th style="width: 130px;">Date of birth</th>
+                    <th style="width: 70px;">Age</th>
+                    <th>Home city</th>
+                    <th>Home country</th>
+                    <th style="width: 110px;">Person type</th>
+                    <th style="width: 90px;">Gender</th>
+                    <th style="width: 120px;" class="text-end">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var p in people)
+                {
+                    <tr>
+                        <td>
+                            <NameWithAvatar Name="@p.FullName"
+                                            ImagePath="@p.ImagePath"
+                                            OnClick="() => OpenPerson(p.PersonId)" />
+                        </td>
+
+                        <td>@(p.DateOfBirth == default ? "-" : p.DateOfBirth.ToString("yyyy-MM-dd"))</td>
+                        <td>@p.Age</td>
+                        <td>@(string.IsNullOrWhiteSpace(p.HomeCity) ? "-" : p.HomeCity)</td>
+                        <td>@(string.IsNullOrWhiteSpace(p.HomeCountry) ? "-" : p.HomeCountry)</td>
+                        <td>@(string.IsNullOrWhiteSpace(p.PersonType) ? "-" : p.PersonType)</td>
+                        <td>@(string.IsNullOrWhiteSpace(p.Gender) ? "-" : p.Gender)</td>
+                        <td class="text-end">
+                            <button class="btn btn-sm btn-outline-primary me-1"
+                                    @onclick="() => OpenPerson(p.PersonId)"
+                                    disabled="@isBusy">
+                                Edit
+                            </button>
+                            <button class="btn btn-sm btn-outline-danger"
+                                    @onclick="() => DeletePersonAsync(p)"
+                                    disabled="@isBusy">
+                                Delete
+                            </button>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+@code
+{
+    private List<PersonDto> people = new();
+    private bool isLoading;
+    private bool isBusy;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        isLoading = true;
+        try
+        {
+            var all = await PersonService.GetAllPeopleAsync();
+            // sort by last, then first
+            people = all
+                .OrderBy(p => p.LastName)
+                .ThenBy(p => p.FirstName)
+                .ToList();
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void AddPerson()
+    {
+        // PersonId = 0 => "new person" on the detail page
+        Nav.NavigateTo("/dayfiance/person/0");
+    }
+
+    private void OpenPerson(int personId)
+    {
+        Nav.NavigateTo($"/dayfiance/person/{personId}");
+    }
+
+    private async Task DeletePersonAsync(PersonDto person)
+    {
+        if (person.PersonId == 0) return;
+
+        var ok = await JS.InvokeAsync<bool>("confirm",
+            $"Delete {person.FullName}?");
+
+        if (!ok) return;
+
+        isBusy = true;
+        try
+        {
+            await PersonService.DeletePersonAsync(person.PersonId);
+
+            // Remove from local list so we don't have to reload whole page
+            people.RemoveAll(p => p.PersonId == person.PersonId);
+        }
+        finally
+        {
+            isBusy = false;
+        }
+    }
+
+}

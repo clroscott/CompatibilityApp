@@ -1,0 +1,49 @@
+﻿<div class="d-inline-flex align-items-center gap-2">
+    @if (!string.IsNullOrWhiteSpace(ResolvedImageUrl))
+    {
+        <img src="@ResolvedImageUrl"
+             alt="@Name"
+             class="rounded-circle border"
+             style="width:40px;height:40px;object-fit:cover;" />
+    }
+    else
+    {
+        <div class="rounded-circle bg-secondary text-white d-flex align-items-center justify-content-center"
+             style="width:40px;height:40px;font-size:0.8rem;">
+            @Initials
+        </div>
+    }
+
+    <button type="button"
+            class="btn btn-link p-0 text-start"
+            @onclick="OnClick">
+        @Name
+    </button>
+</div>
+
+
+@code {
+    [Parameter] public string Name { get; set; } = "";
+    [Parameter] public string? ImagePath { get; set; }
+    [Parameter] public EventCallback OnClick { get; set; }
+
+    private string? ResolvedImageUrl
+        => string.IsNullOrWhiteSpace(ImagePath)
+            ? null
+            : (ImagePath.StartsWith("http", StringComparison.OrdinalIgnoreCase)
+                ? ImagePath
+                : (ImagePath.StartsWith("/")
+                    ? ImagePath
+                    : "/" + ImagePath));  // <--- key bit
+
+    private string Initials
+    {
+        get
+        {
+            if (string.IsNullOrWhiteSpace(Name)) return "?";
+            var parts = Name.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length == 1) return parts[0].Substring(0, 1).ToUpperInvariant();
+            return (parts[0][0].ToString() + parts[^1][0].ToString()).ToUpperInvariant();
+        }
+    }
+}

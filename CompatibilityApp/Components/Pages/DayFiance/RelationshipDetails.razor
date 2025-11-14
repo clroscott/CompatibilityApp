@@ -1,0 +1,210 @@
+﻿@page "/DayFiance/Relationship/{RelationshipId:int}/{SeasonPath:int}"
+@rendermode InteractiveServer
+
+@using Microsoft.AspNetCore.Components.Forms
+@using CompatibilityApp.Domain.DayFiance.Relationships
+@using CompatibilityApp.Domain.Common.Images
+
+@inject IRelationshipService RelationshipSvc
+@inject IImageStorageService ImageStorage
+@inject NavigationManager Nav
+
+<h3>Relationship Details</h3>
+
+@if (isLoading)
+{
+    <p>Loading…</p>
+}
+else if (relationship is null)
+{
+    <div class="alert alert-warning">
+        Relationship not found for season @Season.
+    </div>
+    <button class="btn btn-secondary" @onclick="GoBack">Back</button>
+}
+else
+{
+    <div class="card mb-3">
+        <div class="card-body">
+            <h5 class="card-title">@relationship.CoupleDisplayName</h5>
+            <p class="text-muted mb-3">
+                Season @relationship.Season • @relationship.RelationshipType
+            </p>
+
+            <div class="mb-3">
+                <h6>Relationship image</h6>
+
+                @if (!string.IsNullOrWhiteSpace(relationship.ImagePath))
+                {
+                    <img src="@relationship.ImagePath"
+                         alt="@relationship.CoupleDisplayName"
+                         class="rounded mb-2"
+                         style="max-width:200px;max-height:200px;object-fit:cover;" />
+                }
+                else
+                {
+                    <p class="text-muted mb-2">No image uploaded.</p>
+                }
+
+                <InputFile OnChange="OnImageSelected" accept="image/*" />
+                <div class="form-text">Upload or replace the couple image.</div>
+            </div>
+
+            <div class="row">
+                <div class="col-md-6">
+                    <h6>Person 1</h6>
+
+                    <NameWithAvatar Name="@relationship.Person1FullName"
+                                    ImagePath="@relationship.Person1ImagePath"
+                                    OnClick="@(() => OpenPerson(relationship.PersonId1))" />
+                    <div class="mt-1">
+                        <a href="" @onclick="(e => OpenPerson(relationship.PersonId1))" @onclick:preventDefault>
+                            Open person details
+                        </a>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <h6>Person 2</h6>
+                    <NameWithAvatar Name="@relationship.Person2FullName"
+                                    ImagePath="@relationship.Person2ImagePath"
+                                    OnClick="@(() => OpenPerson(relationship.PersonId2))" />
+                    <div class="mt-1">
+                        <a href="" @onclick="(e => OpenPerson(relationship.PersonId2))" @onclick:preventDefault>
+                            Open person details
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+            <hr />
+
+            <div class="d-flex justify-content-between mt-3">
+                <div>
+                    <strong>Season:</strong> @relationship.Season
+                </div>
+                <div>
+                    <strong>Relationship type:</strong> @relationship.RelationshipType
+                </div>
+            </div>
+
+            <div class="mt-3 text-end">
+                <button class="btn btn-secondary" @onclick="GoBack">Back to list</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public int RelationshipId { get; set; }
+    [Parameter] public int SeasonPath { get; set; }
+
+    public short Season
+    {
+        get => (short)SeasonPath;
+        set => SeasonPath = value;
+    }
+
+    private bool isLoading;
+    private RelationshipViewModel? relationship;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        isLoading = true;
+        try
+        {
+            var rels = await RelationshipSvc.GetRelationshipsWithRatingsAsync(Season);
+            var dto = rels.FirstOrDefault(r => r.RelationshipId == RelationshipId);
+
+            if (dto is null)
+            {
+                relationship = null;
+                return;
+            }
+
+            relationship = new RelationshipViewModel
+            {
+                RelationshipId = dto.RelationshipId,
+                Season = dto.Season,
+                PersonId1 = dto.PersonId1,
+                PersonId2 = dto.PersonId2,
+                Person1FullName = $"{dto.Person1FirstName} {dto.Person1LastName}".Trim(),
+                Person2FullName = $"{dto.Person2FirstName} {dto.Person2LastName}".Trim(),
+                Person1ImagePath = dto.Person1ImagePath,
+                Person2ImagePath = dto.Person2ImagePath,
+                ImagePath = dto.ImagePath,
+                CoupleDisplayName = dto.CoupleDisplayName,
+                RelationshipType = dto.RelationshipType
+            };
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task OnImageSelected(InputFileChangeEventArgs e)
+    {
+        if (relationship is null) return;
+
+        var file = e.File;
+        if (file is null) return;
+
+        // basic content-type check (optional but consistent with Person page)
+        var permitted = new[] { "image/jpeg", "image/png", "image/gif", "image/webp" };
+        if (!permitted.Contains(file.ContentType))
+            return;
+
+        const long maxSize = 2 * 1024 * 1024; // 2 MB
+        var ext = Path.GetExtension(file.Name);
+        if (string.IsNullOrWhiteSpace(ext))
+            ext = ".jpg";
+
+        await using var stream = file.OpenReadStream(maxSize);
+
+        // this will handle deleting the previous relationship image for this id
+        var newPath = await ImageStorage.SaveImageAsync(
+            category: "relationship",
+            id: relationship.RelationshipId,
+            content: stream,
+            extension: ext);
+
+        // Persist to DB
+        await RelationshipSvc.UpdateRelationshipImagePathAsync(
+            relationship.RelationshipId,
+            newPath);
+
+        // Update local VM so UI refreshes
+        relationship.ImagePath = newPath;
+    }
+
+    private void OpenPerson(int personId)
+        => Nav.NavigateTo($"/dayfiance/person/{personId}");
+
+    private void GoBack()
+        => Nav.NavigateTo("/DayFiance/Relationships/Manage");
+
+    private sealed class RelationshipViewModel
+    {
+        public int RelationshipId { get; set; }
+        public short Season { get; set; }
+
+        public int PersonId1 { get; set; }
+        public int PersonId2 { get; set; }
+
+        public string Person1FullName { get; set; } = "";
+        public string Person2FullName { get; set; } = "";
+
+        public string? Person1ImagePath { get; set; }
+        public string? Person2ImagePath { get; set; }
+
+        public string? ImagePath { get; set; }
+
+        public string CoupleDisplayName { get; set; } = "";
+        public string RelationshipType { get; set; } = "";
+    }
+}
