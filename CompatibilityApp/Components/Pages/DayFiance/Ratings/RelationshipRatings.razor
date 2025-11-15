@@ -5,7 +5,8 @@
 @using CompatibilityApp.Domain.DayFiance.Ratings
 @using CompatibilityApp.Domain.DayFiance.Relationships
 @using CompatibilityApp.Domain.DayFiance.Seasons
-
+@using CompatibilityApp.Domain.DayFiance.Calculations
+@inject IRatingScoreCalculator RatingScoreCalculator
 @inject IRelationshipService RelationshipSvc
 @inject IRatingTypeService RatingTypeSvc
 @inject ISeasonService SeasonService
@@ -46,6 +47,7 @@ else
         <thead>
             <tr>
                 <th style="min-width:200px">Couple</th>
+                <th style="width:90px">Score</th>
                 @foreach (var rt in ratingTypes)
                 {
                     <th class="text-center" title="@rt.RatingName">
@@ -73,6 +75,8 @@ else
                                         ImagePath="@r.ImagePath"
                                         OnClick="@(() => OpenRelationship(r.RelationshipId))" />
                     </td>
+                    <td>@(GetRelationshipScore(r)?.ToString("0.00") ?? "-")</td>
+
                     @foreach (var rt in ratingTypes)
                     {
                         var val = r.Ratings.TryGetValue(rt.RatingTypeId, out var v) ? v : null;
@@ -96,7 +100,7 @@ else
     private List<RelationshipRow>? rows;
     private List<RatingTypeDto>? ratingTypes;
     private string newTypeName = "";
-    private decimal newTypeWeight = 0m;
+    private decimal newTypeWeight = 10m;
 
     private List<short> AvailableSeasons = new();
     private short SeasonNumber = 6;   // default season
@@ -126,7 +130,7 @@ else
 
         await RatingTypeSvc.AddAsync(newTypeName.Trim(), newTypeWeight, PageCategoryType);
         newTypeName = "";
-        newTypeWeight = 0m;
+        newTypeWeight = 10m;
 
         await RefreshTypes();
     }
@@ -195,6 +199,17 @@ else
 
         StateHasChanged();
     }
+
+
+    private decimal? GetRelationshipScore(RelationshipRow row)
+    {
+        if (ratingTypes is null || ratingTypes.Count == 0)
+            return null;
+
+        var result = RatingScoreCalculator.Calculate(row.Ratings, ratingTypes);
+        return result.Score;
+    }
+
     private void OpenRelationship(int RelationshipId)
     {
         Nav.NavigateTo($"/dayfiance/Relationship/{RelationshipId}/{SeasonNumber}");
