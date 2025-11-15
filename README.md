@@ -4,4 +4,4 @@ This compatability app is an experimental app designed to estimate the long-term
 
 Built with love (and rigorous methodology) by Mikaela & Clayton, this project combines statistical modeling with modern web app development to provide couples with personalized insights — or in our words:
 
-“Math, but make it romantic.”
+“Math, but make it messy.”
