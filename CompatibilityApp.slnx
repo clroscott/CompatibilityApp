@@ -5,4 +5,8 @@
   <Project Path="CompatibilityApp.Domain/CompatibilityApp.Domain.csproj" />
   <Project Path="CompatibilityApp.Infastructure/CompatibilityApp.Infrastructure.csproj" />
   <Project Path="CompatibilityApp/CompatibilityApp.csproj" />
+  <Project Path="CompatibilityDb/CompatibilityDb.sqlproj" Id="4045d279-994d-4e5d-801c-8d8799293740">
+    <Build />
+    <Deploy />
+  </Project>
 </Solution>
