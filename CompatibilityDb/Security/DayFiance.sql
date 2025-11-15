@@ -1,0 +1,3 @@
+﻿CREATE SCHEMA [DayFiance]
+    AUTHORIZATION [dbo];
+
