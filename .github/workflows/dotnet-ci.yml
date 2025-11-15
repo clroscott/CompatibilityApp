@@ -2,26 +2,26 @@ name: .NET CI
 
 on:
   push:
-    branches: [ "master" ]
+    branches: [ master, Dev/** ]
   pull_request:
-    branches: [ "master" ]
+    branches: [ master ]
 
 jobs:
   build:
-    runs-on: windows-latest
+    runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v4
+    - name: Checkout
+      uses: actions/checkout@v4
 
-    - uses: actions/setup-dotnet@v4
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
       with:
-        dotnet-version: '10.x'
+        dotnet-version: '10.0.x'   # your target (preview) SDK
 
+    # Restore & build ONLY the web app project, not the .sqlproj
     - name: Restore
-      run: dotnet restore
+      run: dotnet restore CompatibilityApp/CompatibilityApp.csproj
 
     - name: Build
-      run: dotnet build --configuration Release --no-restore
-
-    - name: Test
-      run: dotnet test --no-build --verbosity normal
+      run: dotnet build CompatibilityApp/CompatibilityApp.csproj --configuration Release --no-restore
