@@ -13,6 +13,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using CompatibilityApp.Domain.Common.Images;
 using CompatibilityApp.Infrastructure.Common.Images;
+using CompatibilityApp.Domain.DayFiance.Calculations;
 
 
 var builder = WebApplication.CreateBuilder(args);
@@ -34,6 +35,8 @@ builder.Services.AddScoped<IPersonService, PersonService>();
 builder.Services.AddScoped<IRatingTypeService, RatingTypeService>();
 builder.Services.AddScoped<IRelationshipService, RelationshipService>();
 builder.Services.AddScoped<ISeasonService, SeasonService>();
+builder.Services.AddScoped<IRatingScoreCalculator, RatingScoreCalculator>();
+
 
 builder.Services.AddScoped<IImageStorageService>(sp =>
 {

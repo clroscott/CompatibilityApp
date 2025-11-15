@@ -3,6 +3,8 @@
 @using CompatibilityApp.Domain.DayFiance.People
 @using CompatibilityApp.Domain.DayFiance.Ratings
 @using CompatibilityApp.Domain.DayFiance.Seasons
+@using CompatibilityApp.Domain.DayFiance.Calculations
+@inject IRatingScoreCalculator RatingScoreCalculator
 @inject IPersonService PersonSvc
 @inject IRatingTypeService RatingTypeSvc
 @inject ISeasonService SeasonService
@@ -47,6 +49,7 @@ else
             <tr>
                 <th style="min-width:200px">Person</th>
                 <th style="width:70px">Age</th>
+                <th style="width:90px">Score</th>
                 @foreach (var rt in ratingTypes)
                 {
                     <th class="text-center" title="@rt.RatingName">
@@ -78,7 +81,7 @@ else
                                         OnClick="@(() => OpenPerson(r.PersonId))" />
                     </td>
                     <td>@(r.Age.ToString() ?? "")</td>
-
+                    <td>@(GetPersonScore(r)?.ToString("0.00") ?? "-")</td>
                     @foreach (var rt in ratingTypes)
                     {
                         var val = r.Ratings.TryGetValue(rt.RatingTypeId, out var v) ? v : null;
@@ -109,7 +112,7 @@ else
     private List<PersonRow>? rows;
     private List<RatingTypeDto>? ratingTypes;
     private string newTypeName = "";
-    private decimal newTypeWeight = 0m;
+    private decimal newTypeWeight = 10m;
 
     private List<short> AvailableSeasons = new();
     private short SeasonNumber = 6;   // default season
@@ -158,7 +161,7 @@ else
         if (string.IsNullOrWhiteSpace(newTypeName)) return;
         await RatingTypeSvc.AddAsync(newTypeName.Trim(), newTypeWeight, PageCategoryType);
         newTypeName = "";
-        newTypeWeight = 0m;
+        newTypeWeight = 10m;
         await RefreshTypes();   // pulls new list and expands headers/cells
     }
 
@@ -176,6 +179,14 @@ else
             foreach (var rt in ratingTypes)
                 if (!r.Ratings.ContainsKey(rt.RatingTypeId))
                     r.Ratings[rt.RatingTypeId] = null;
+    }
+    private decimal? GetPersonScore(PersonRow row)
+    {
+        if (ratingTypes is null || ratingTypes.Count == 0)
+            return null;
+
+        var result = RatingScoreCalculator.Calculate(row.Ratings, ratingTypes);
+        return result.Score;
     }
 
     // private async Task SavePerson(PersonRow r)
