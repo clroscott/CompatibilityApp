@@ -22,7 +22,19 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
-builder.Services.AddDbContext<CompatibiltyDBContext>(opt => opt.UseSqlServer(builder.Configuration.GetConnectionString("Default")));
+
+#if DEBUG
+var connName = "Test";
+#else
+    var connName = "Prod";
+#endif
+
+
+var connectionString = builder.Configuration.GetConnectionString(connName)
+    ?? throw new InvalidOperationException($"Connection string '{connName}' not found.");
+
+builder.Services.AddDbContext<CompatibilityDBContext>(options =>
+    options.UseSqlServer(connectionString));
 
 
 builder.Services.AddAutoMapper(cfg => { }, typeof(PersonProfile));

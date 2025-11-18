@@ -1,6 +1,7 @@
 ﻿@page "/DayFiance/Ratings/RelationshipRatings"
 @rendermode InteractiveServer
 
+@using CompatibilityApp.Domain.Common
 @using CompatibilityApp.Domain.DayFiance.People
 @using CompatibilityApp.Domain.DayFiance.Ratings
 @using CompatibilityApp.Domain.DayFiance.Relationships
@@ -58,7 +59,7 @@ else
                                    type="number"
                                    step="0.5"
                                    value="@rt.RatingWeight"
-                                   @onchange="async e => await SaveWeightAsync(rt.RatingTypeId, ParseDecimalOrNull(e.Value))" />
+                                   @onchange="async e => await SaveWeightAsync(rt.RatingTypeId, ParseUtils.ParseDecimalOrNull(e.Value))" />
                         </div>
                     </th>
                 }
@@ -85,7 +86,7 @@ else
                                    style="width:60px; padding:0 4px;"
                                    type="number"
                                    value="@((string?)val?.ToString())"
-                                   @onchange="async e => await SaveRating(r.RelationshipId, rt.RatingTypeId, ParseIntOrNull(e.Value))" />
+                                   @onchange="async e => await SaveRating(r.RelationshipId, rt.RatingTypeId, ParseUtils.ParseIntOrNull(e.Value))" />
                         </td>
                     }
 
@@ -215,11 +216,6 @@ else
         Nav.NavigateTo($"/dayfiance/Relationship/{RelationshipId}/{SeasonNumber}");
     }
 
-    private static int? ParseIntOrNull(object? v)
-        => int.TryParse(v?.ToString(), out var n) ? n : (int?)null;
-
-    private static decimal? ParseDecimalOrNull(object? v)
-        => decimal.TryParse(v?.ToString(), out var d) ? d : (decimal?)null;
 
     private sealed class RelationshipRow
     {

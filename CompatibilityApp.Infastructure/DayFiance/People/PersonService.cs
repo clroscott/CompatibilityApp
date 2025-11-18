@@ -15,10 +15,10 @@ namespace CompatibilityApp.Infrastructure.DayFiance.People;
 /// </summary>
 public sealed class PersonService : IPersonService
 {
-    private readonly CompatibiltyDBContext _db; 
+    private readonly CompatibilityDBContext _db; 
     private readonly IMapper _mapper;
 
-    public PersonService(CompatibiltyDBContext db, IMapper mapper)
+    public PersonService(CompatibilityDBContext db, IMapper mapper)
     {
         _db = db;
         _mapper = mapper;
