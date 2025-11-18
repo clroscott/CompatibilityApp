@@ -7,9 +7,9 @@ using Microsoft.EntityFrameworkCore;
 
 namespace CompatibilityApp.Infrastructure.Data;
 
-public partial class CompatibiltyDBContext : DbContext
+public partial class CompatibilityDBContext : DbContext
 {
-    public CompatibiltyDBContext(DbContextOptions<CompatibiltyDBContext> options)
+    public CompatibilityDBContext(DbContextOptions<CompatibilityDBContext> options)
         : base(options)
     {
     }

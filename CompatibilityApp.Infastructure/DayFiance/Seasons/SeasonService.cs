@@ -8,10 +8,10 @@ namespace CompatibilityApp.Infrastructure.DayFiance.Seasons;
 
 public sealed class SeasonService : ISeasonService
 {
-    private readonly CompatibiltyDBContext _db;
+    private readonly CompatibilityDBContext _db;
     private readonly IMapper _mapper;
 
-    public SeasonService(CompatibiltyDBContext db, IMapper mapper)
+    public SeasonService(CompatibilityDBContext db, IMapper mapper)
     {
         _db = db;
         _mapper = mapper;

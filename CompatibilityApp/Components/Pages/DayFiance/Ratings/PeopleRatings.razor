@@ -1,5 +1,6 @@
 ﻿@page "/DayFiance/Ratings/PeopleRatings"
 @rendermode InteractiveServer
+@using CompatibilityApp.Domain.Common
 @using CompatibilityApp.Domain.DayFiance.People
 @using CompatibilityApp.Domain.DayFiance.Ratings
 @using CompatibilityApp.Domain.DayFiance.Seasons
@@ -61,7 +62,7 @@ else
                                    type="number"
                                    step="0.5"
                                    value="@rt.RatingWeight"
-                                   @onchange="async e => await SaveWeightAsync(rt.RatingTypeId, ParseDecimalOrNull(e.Value))" />
+                                   @onchange="async e => await SaveWeightAsync(rt.RatingTypeId, ParseUtils.ParseDecimalOrNull(e.Value))" />
                         </div>
                     </th>
                 }
@@ -73,7 +74,7 @@ else
             @foreach (var r in rows)
             {
                 <tr>
-                   @*  <td><input class="form-control form-control-sm" @bind="r.FirstName" /></td>
+                    @*  <td><input class="form-control form-control-sm" @bind="r.FirstName" /></td>
                     <td><input class="form-control form-control-sm" @bind="r.LastName" /></td> *@
                     <td>
                         <NameWithAvatar Name="@($"{r.FirstName} {r.LastName}".Trim())"
@@ -91,7 +92,7 @@ else
                                    type="number"
                                    step="0.5"
                                    value="@((string?)val?.ToString())"
-                                   @onchange="async e => await SaveRating(r.PersonId, rt.RatingTypeId, ParseDecimalOrNull(e.Value))" />
+                                   @onchange="async e => await SaveRating(r.PersonId, rt.RatingTypeId, ParseUtils.ParseDecimalOrNull(e.Value))" />
                         </td>
 
                     }
@@ -231,7 +232,7 @@ else
             FirstName = p.FirstName,
             LastName = p.LastName,
             Age = p.Age,
-            ImagePath = p.ImagePath, 
+            ImagePath = p.ImagePath,
             Ratings = new Dictionary<int, decimal?>(p.RatingsByTypeId)
         }).ToList();
 
@@ -260,15 +261,8 @@ else
     {
         Nav.NavigateTo($"/dayfiance/person/{personId}");
     }
-    private static decimal? ParseDecimalOrNull(object? v)
-    => decimal.TryParse(v?.ToString(), out var d) ? d : null;
 
-    // private static int? ParseIntOrNull(object? v)
-    //     => int.TryParse(v?.ToString(), out var n) ? n : null;
 
-    // private void AddNewRow()
-    //     => rows!.Add(new PersonRow { FirstName = "", LastName = "" });
-   
     private sealed class PersonRow
     {
         public int PersonId { get; set; }

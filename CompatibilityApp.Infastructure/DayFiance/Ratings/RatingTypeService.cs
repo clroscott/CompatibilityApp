@@ -8,10 +8,10 @@ namespace CompatibilityApp.Infrastructure.DayFiance.Ratings;
 
 public sealed class RatingTypeService : IRatingTypeService
 {
-    private readonly CompatibiltyDBContext _db;
+    private readonly CompatibilityDBContext _db;
     private readonly IMapper _mapper;
 
-    public RatingTypeService(CompatibiltyDBContext db, IMapper mapper)
+    public RatingTypeService(CompatibilityDBContext db, IMapper mapper)
     {
         _db = db;
         _mapper = mapper;

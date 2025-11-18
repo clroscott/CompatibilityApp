@@ -12,10 +12,10 @@ namespace CompatibilityApp.Infrastructure.DayFiance.Relationships
     /// </summary>
     public sealed class RelationshipService : IRelationshipService
     {
-        private readonly CompatibiltyDBContext _db;
+        private readonly CompatibilityDBContext _db;
         private readonly IMapper _mapper; // reserved for CRUD mapping if needed later
 
-        public RelationshipService(CompatibiltyDBContext db, IMapper mapper)
+        public RelationshipService(CompatibilityDBContext db, IMapper mapper)
         {
             _db = db;
             _mapper = mapper;
